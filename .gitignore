@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment and secret files
+.env
+.env.*
+!.env.example
+
+# Build and tool output
+dist/
+build/
+.expo/
+.gradle/
+
+# Logs and OS/editor files
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
