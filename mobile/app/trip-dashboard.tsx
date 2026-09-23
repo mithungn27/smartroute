@@ -28,7 +28,8 @@ import {
 // API
 // ======================================================
 
-const API = "http://10.55.120.228:5000";
+const API =
+  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
 
 // ======================================================
 // TYPES
@@ -44,6 +45,40 @@ type Coordinate = {
   longitude: number;
 };
 
+interface MapErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+}
+
+interface MapErrorBoundaryState {
+  hasError: boolean;
+}
+
+class MapErrorBoundary extends React.Component<
+  MapErrorBoundaryProps,
+  MapErrorBoundaryState
+> {
+  constructor(props: MapErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.log("Map rendering caught in error boundary:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
 // ======================================================
 // COMPONENT
 // ======================================================
@@ -56,7 +91,6 @@ export default function TripDashboard() {
     budget?: string;
     travelers?: string;
     travelType?: string;
-    plan?: string;
   }>();
 
   const source = String(params.source || "");
@@ -83,6 +117,7 @@ export default function TripDashboard() {
   const [chatLoading, setChatLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [saved, setSaved] = useState(false);
+  const [savingTrip, setSavingTrip] = useState(false);
 
   // ====================================================
   // MAP
@@ -224,43 +259,33 @@ export default function TripDashboard() {
       // PLAN
       // ==================================================
 
-      if (params.plan) {
-        try {
-          const parsedPlan = JSON.parse(
-            String(params.plan)
+      try {
+        const storedPlan = await AsyncStorage.getItem(
+          "currentGeneratedTrip"
+        );
+
+        if (storedPlan) {
+          const parsedPlan = JSON.parse(storedPlan);
+
+          console.log(
+            "Generated trip loaded from storage."
           );
 
           setPlan(parsedPlan);
-        } catch (error) {
-          console.log("Plan parsing error:", error);
+        } else {
+          console.log(
+            "No generated trip found in storage."
+          );
+
           setPlan(null);
         }
-      } else {
-        try {
-          const response = await fetch(`${API}/plan`, {
-            method: "POST",
+      } catch (error) {
+        console.log(
+          "Stored plan loading error:",
+          error
+        );
 
-            headers: {
-              "Content-Type": "application/json",
-            },
-
-            body: JSON.stringify({
-              source,
-              city: destination,
-              days: Number(days),
-              budget: Number(budget),
-              travelers: Number(travelers),
-              travelType,
-            }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            setPlan(data);
-          }
-        } catch (error) {
-          console.log("Plan loading error:", error);
-        }
+        setPlan(null);
       }
 
       // ==================================================
@@ -297,7 +322,9 @@ export default function TripDashboard() {
           setHotels(
             Array.isArray(data)
               ? data
-              : data.hotels || []
+              : Array.isArray(data?.hotels)
+                ? data.hotels
+                : []
           );
         }
       } catch (error) {
@@ -498,13 +525,94 @@ export default function TripDashboard() {
   // SAVE TRIP
   // ======================================================
 
-  const saveTrip = () => {
-    setSaved(true);
+  const saveTrip = async () => {
+    if (savingTrip || saved) return;
 
-    Alert.alert(
-      "Trip Saved ⭐",
-      `Your ${days}-day trip from ${source} to ${destination} has been saved.`
-    );
+    try {
+      setSavingTrip(true);
+
+      const token =
+        (await AsyncStorage.getItem("token")) ||
+        (await AsyncStorage.getItem("authToken"));
+
+      if (!token) {
+        Alert.alert(
+          "Login Required",
+          "Please log in to your account to save your trip to MongoDB.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Login",
+              onPress: () => router.push("/login"),
+            },
+          ]
+        );
+        return;
+      }
+
+      const numericDays =
+        Number(String(days).replace(/[^0-9.]/g, "")) || 1;
+      const numericBudget =
+        Number(String(budget).replace(/[^0-9.]/g, "")) || 0;
+      const numericTravelers =
+        Number(String(travelers).replace(/[^0-9.]/g, "")) || 1;
+
+      const tripPayload = {
+        source: String(source).trim(),
+        destination: String(destination).trim(),
+        days: numericDays,
+        budget: numericBudget,
+        travelers: numericTravelers,
+        travelType: travelType || "Family",
+        plan: plan || {
+          source,
+          destination,
+          days: numericDays,
+          budget: numericBudget,
+          travelers: numericTravelers,
+          travelType,
+          hotels,
+          transport,
+          attractions,
+          sustainability,
+        },
+      };
+
+      const response = await fetch(`${API}/saved-trips`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(tripPayload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        Alert.alert(
+          "Save Failed",
+          data?.message || "Unable to save your trip. Please try again."
+        );
+        return;
+      }
+
+      setSaved(true);
+
+      Alert.alert(
+        "Trip Saved ⭐",
+        `Your ${numericDays}-day trip from ${source} to ${destination} has been saved to your account.`
+      );
+    } catch (error: any) {
+      console.error("Save trip error:", error);
+      Alert.alert(
+        "Save Connection Error",
+        "Could not connect to the backend server. Please verify your connection and try again."
+      );
+    } finally {
+      setSavingTrip(false);
+    }
   };
 
   // ======================================================
@@ -1070,38 +1178,54 @@ Duration: ${item.duration}`,
             {destination}
           </Text>
 
-          <MapView
-            style={styles.map}
-            region={region}
-            showsCompass
-            showsScale
-            showsBuildings
-            showsPointsOfInterest
+          <MapErrorBoundary
+            fallback={
+              <View style={[styles.map, styles.mapFallback]}>
+                <Text style={styles.mapFallbackIcon}>🗺️</Text>
+                <Text style={styles.mapFallbackTitle}>Route Overview</Text>
+                <Text style={styles.mapFallbackSubtitle}>
+                  {source} ➔ {destination}
+                </Text>
+                <Text style={styles.mapFallbackNote}>
+                  Live Google Maps navigation is available below
+                </Text>
+              </View>
+            }
           >
-            <Marker
-              coordinate={
-                sourceLocation
-              }
-              title={source}
-              pinColor="green"
-            />
+            <MapView
+              style={styles.map}
+              region={region}
+              showsCompass
+              showsScale
+              showsBuildings
+              showsPointsOfInterest
+            >
+              <Marker
+                coordinate={
+                  sourceLocation
+                }
+                title={source}
+                pinColor="green"
+              />
 
-            <Marker
-              coordinate={
-                destinationLocation
-              }
-              title={destination}
-              pinColor="red"
-            />
+              <Marker
+                coordinate={
+                  destinationLocation
+                }
+                title={destination}
+                pinColor="red"
+              />
 
-            <Polyline
-              coordinates={[
-                sourceLocation,
-                destinationLocation,
-              ]}
-              strokeWidth={5}
-            />
-          </MapView>
+              <Polyline
+                coordinates={[
+                  sourceLocation,
+                  destinationLocation,
+                ]}
+                strokeWidth={5}
+                strokeColor="#176B8C"
+              />
+            </MapView>
+          </MapErrorBoundary>
 
           <TouchableOpacity
             style={
@@ -1214,21 +1338,51 @@ Duration: ${item.duration}`,
           <TouchableOpacity
             style={[
               styles.secondaryButton,
-              saved &&
-                styles.savedButton,
+              (saved || savingTrip) && styles.savedButton,
             ]}
-            onPress={
-              saveTrip
-            }
+            onPress={saveTrip}
+            disabled={savingTrip || saved}
           >
-            <Text
-              style={
-                styles.secondaryText
-              }
-            >
-              {saved
+            <Text style={styles.secondaryText}>
+              {savingTrip
+                ? "⏳ Saving Trip..."
+                : saved
                 ? "✅ Trip Saved"
                 : "⭐ Save My Trip"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              {
+                marginTop: 10,
+                backgroundColor: "#E0F2FE",
+                borderColor: "#0284C7",
+              },
+            ]}
+            onPress={() => router.push("/saved-trips")}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.secondaryText, { color: "#0284C7" }]}>
+              📂 View Saved Trips
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              {
+                marginTop: 10,
+                backgroundColor: "#FFFFFF",
+                borderColor: "#176B8C",
+              },
+            ]}
+            onPress={() => router.push("/(tabs)")}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.secondaryText, { color: "#176B8C" }]}>
+              ✨ Plan Another Trip
             </Text>
           </TouchableOpacity>
         </View>
@@ -2099,6 +2253,40 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 300,
     borderRadius: 17,
+  },
+
+  mapFallback: {
+    backgroundColor: "#E8F4F8",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#C5DFEC",
+    padding: 20,
+  },
+
+  mapFallbackIcon: {
+    fontSize: 42,
+    marginBottom: 8,
+  },
+
+  mapFallbackTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#174A70",
+    marginBottom: 4,
+  },
+
+  mapFallbackSubtitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#287A9D",
+    marginBottom: 6,
+  },
+
+  mapFallbackNote: {
+    fontSize: 12,
+    color: "#607D8B",
+    textAlign: "center",
   },
 
   flightButton: {

@@ -17,7 +17,8 @@ import { router } from "expo-router";
 // API CONFIGURATION
 // ======================================================
 
-const API_URL = "http://10.55.120.228:5000";
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
 
 // ======================================================
 // REGISTER SCREEN

@@ -13,7 +13,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
-const API_URL = "http://10.55.120.228:5000";
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
 
 export default function SignupScreen() {
   const [name, setName] = useState("");

@@ -14,7 +14,8 @@ import {
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const API_URL = "http://10.55.120.228:5000";
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -123,6 +124,15 @@ export default function LoginScreen() {
           "user",
           JSON.stringify(data.user)
         );
+      }
+
+      // =====================================================
+      // SAVE AUTHENTICATION TOKEN
+      // =====================================================
+
+      if (data.token) {
+        await AsyncStorage.setItem("token", String(data.token));
+        await AsyncStorage.setItem("authToken", String(data.token));
       }
 
       // =====================================================
@@ -296,7 +306,7 @@ export default function LoginScreen() {
             <Text
               style={styles.normalText}
             >
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
             </Text>
 
             <TouchableOpacity

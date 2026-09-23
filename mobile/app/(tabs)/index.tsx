@@ -12,12 +12,23 @@ import {
   Platform,
 } from "react-native";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// ======================================================
+// API
+// ======================================================
 
 // IMPORTANT:
-// Use the IP address of the computer running your backend.
-const API = "http://10.55.120.228:5000";
+// This must be the IP address of the computer running
+// your SMART-ROUTE backend.
+const API =
+  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
 
 export default function HomeScreen() {
+  // ====================================================
+  // FORM STATES
+  // ====================================================
+
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
   const [days, setDays] = useState("");
@@ -27,10 +38,15 @@ export default function HomeScreen() {
 
   const [loading, setLoading] = useState(false);
 
+  // ====================================================
+  // GENERATE TRIP
+  // ====================================================
+
   const generateTrip = async () => {
-    // -----------------------------
+    // --------------------------------------------------
     // 1. CHECK INPUTS
-    // -----------------------------
+    // --------------------------------------------------
+
     if (
       !source.trim() ||
       !destination.trim() ||
@@ -45,7 +61,10 @@ export default function HomeScreen() {
       return;
     }
 
-    // Convert numbers safely
+    // --------------------------------------------------
+    // 2. CONVERT NUMBERS
+    // --------------------------------------------------
+
     const daysNumber = Number(days);
     const budgetNumber = Number(budget);
     const travelersNumber = Number(travelers);
@@ -65,13 +84,18 @@ export default function HomeScreen() {
       return;
     }
 
+    // --------------------------------------------------
+    // 3. START LOADING
+    // --------------------------------------------------
+
     try {
       setLoading(true);
 
       console.log("=================================");
-      console.log("GENERATING TRIP");
-      console.log("Source:", source);
-      console.log("Destination:", destination);
+      console.log("SMART-ROUTE: GENERATING TRIP");
+      console.log("=================================");
+      console.log("Source:", source.trim());
+      console.log("Destination:", destination.trim());
       console.log("Days:", daysNumber);
       console.log("Budget:", budgetNumber);
       console.log("Travelers:", travelersNumber);
@@ -79,9 +103,10 @@ export default function HomeScreen() {
       console.log("API:", `${API}/plan`);
       console.log("=================================");
 
-      // -----------------------------
-      // 2. CALL BACKEND
-      // -----------------------------
+      // ------------------------------------------------
+      // 4. CALL BACKEND /plan
+      // ------------------------------------------------
+
       const response = await fetch(`${API}/plan`, {
         method: "POST",
 
@@ -100,33 +125,48 @@ export default function HomeScreen() {
         }),
       });
 
-      console.log("Backend status:", response.status);
+      console.log("Backend HTTP status:", response.status);
 
-      // -----------------------------
-      // 3. READ RESPONSE SAFELY
-      // -----------------------------
+      // ------------------------------------------------
+      // 5. READ RESPONSE
+      // ------------------------------------------------
+
       const responseText = await response.text();
 
       console.log(
-        "Backend response received:",
+        "Backend response preview:",
         responseText.substring(0, 500)
       );
+
+      if (!responseText.trim()) {
+        throw new Error(
+          "The backend returned an empty response."
+        );
+      }
+
+      // ------------------------------------------------
+      // 6. PARSE JSON
+      // ------------------------------------------------
 
       let data: any;
 
       try {
         data = JSON.parse(responseText);
       } catch (parseError) {
-        console.log("JSON parsing error:", parseError);
+        console.log(
+          "JSON parsing error:",
+          parseError
+        );
 
         throw new Error(
-          "The backend returned an invalid response."
+          "The backend returned an invalid JSON response."
         );
       }
 
-      // -----------------------------
-      // 4. CHECK BACKEND ERROR
-      // -----------------------------
+      // ------------------------------------------------
+      // 7. CHECK SERVER RESPONSE
+      // ------------------------------------------------
+
       if (!response.ok) {
         throw new Error(
           data?.message ||
@@ -135,37 +175,46 @@ export default function HomeScreen() {
         );
       }
 
-      // Make sure we actually received data
       if (!data) {
         throw new Error(
           "No trip data was received from the backend."
         );
       }
 
-      console.log("Trip generated successfully.");
+      console.log(
+        "SMART-ROUTE: Trip generated successfully."
+      );
 
-      // -----------------------------
-      // 5. CONVERT TRIP DATA
-      // -----------------------------
-      let planString = "";
+      // ------------------------------------------------
+      // 8. SAVE COMPLETE PLAN TO ASYNC STORAGE
+      // ------------------------------------------------
+      //
+      // IMPORTANT:
+      // We DO NOT pass the large plan through Expo Router.
+      //
+      // This prevents Android crashes caused by very large
+      // navigation parameters.
+      //
 
-      try {
-        planString = JSON.stringify(data);
-      } catch (jsonError) {
-        console.log(
-          "Trip JSON conversion error:",
-          jsonError
-        );
+      await AsyncStorage.setItem(
+        "currentGeneratedTrip",
+        JSON.stringify(data)
+      );
 
-        throw new Error(
-          "Unable to process the generated trip."
-        );
-      }
+      console.log(
+        "SMART-ROUTE: Complete trip saved to AsyncStorage."
+      );
 
-      // -----------------------------
-      // 6. NAVIGATE TO DASHBOARD
-      // -----------------------------
-      console.log("Opening Trip Dashboard...");
+      // ------------------------------------------------
+      // 9. NAVIGATE TO DASHBOARD
+      // ------------------------------------------------
+      //
+      // Only small values are passed here.
+      //
+
+      console.log(
+        "SMART-ROUTE: Opening Trip Dashboard..."
+      );
 
       router.push({
         pathname: "/trip-dashboard",
@@ -176,17 +225,20 @@ export default function HomeScreen() {
           budget: String(budgetNumber),
           travelers: String(travelersNumber),
           travelType: travelType,
-          plan: planString,
         },
       });
 
-      console.log("Navigation completed.");
+      console.log(
+        "SMART-ROUTE: Navigation requested successfully."
+      );
     } catch (error: unknown) {
-      // -----------------------------
-      // 7. SAFE ERROR HANDLING
-      // -----------------------------
+      // ------------------------------------------------
+      // 10. ERROR HANDLING
+      // ------------------------------------------------
+
       console.log("=================================");
-      console.log("GENERATE TRIP ERROR");
+      console.log("SMART-ROUTE: GENERATE TRIP ERROR");
+      console.log("=================================");
       console.log(error);
       console.log("=================================");
 
@@ -202,12 +254,17 @@ export default function HomeScreen() {
         `${errorMessage}\n\nMake sure:\n• Backend is running\n• Phone and computer are on the same Wi-Fi\n• Backend IP address is correct`
       );
     } finally {
-      // -----------------------------
-      // 8. STOP LOADING
-      // -----------------------------
+      // ------------------------------------------------
+      // 11. STOP LOADING
+      // ------------------------------------------------
+
       setLoading(false);
     }
   };
+
+  // ====================================================
+  // UI
+  // ====================================================
 
   return (
     <KeyboardAvoidingView
@@ -223,9 +280,9 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* =========================
+        {/* =================================================
             HERO SECTION
-        ========================= */}
+        ================================================== */}
 
         <View style={styles.hero}>
           <View style={styles.logoCircle}>
@@ -243,14 +300,25 @@ export default function HomeScreen() {
           </Text>
 
           <Text style={styles.description}>
-            Plan smarter • Travel safer • Explore
-            better
+            Plan smarter • Travel safer • Explore better
           </Text>
+
+          <TouchableOpacity
+            style={styles.savedTripsHeroBtn}
+            onPress={() =>
+              router.push("/saved-trips")
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.savedTripsHeroText}>
+              ⭐ My Saved Trips
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* =========================
+        {/* =================================================
             TRAVEL FORM
-        ========================= */}
+        ================================================== */}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>
@@ -377,9 +445,9 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* =========================
+          {/* =================================================
               GENERATE BUTTON
-          ========================= */}
+          ================================================== */}
 
           <TouchableOpacity
             style={[
@@ -415,9 +483,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* =========================
+        {/* =================================================
             FEATURES
-        ========================= */}
+        ================================================== */}
 
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>
@@ -465,9 +533,9 @@ export default function HomeScreen() {
   );
 }
 
-/* ==================================================
-   STYLES
-================================================== */
+// ======================================================
+// STYLES
+// ======================================================
 
 const styles = StyleSheet.create({
   screen: {
@@ -521,6 +589,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 7,
     textAlign: "center",
+  },
+
+  savedTripsHeroBtn: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#BEE3F8",
+    elevation: 2,
+  },
+
+  savedTripsHeroText: {
+    color: "#176B8C",
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   card: {

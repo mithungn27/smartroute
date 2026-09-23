@@ -2826,61 +2826,35 @@ app.post(
         });
       }
 
-      // If database is unavailable,
-      // return successful local/demo response
-      // instead of crashing the app.
-      if (
-        !mongoose.connection.readyState
-      ) {
-        return res.json({
-          success: true,
-          demoData: true,
-          message:
-            "Trip saved successfully on the current session.",
-          trip: {
-            source,
-            destination,
-            days,
-            budget,
-            travelers,
-            travelType,
-            plan,
-          },
+      if (!mongoose.connection.readyState) {
+        return res.status(503).json({
+          success: false,
+          message: "Database connection unavailable. Unable to save trip to MongoDB.",
         });
       }
 
-      const trip =
-        await SavedTrip.create({
-          userId:
-            user?._id || undefined,
-
-          source,
-
-          destination,
-
-          days:
-            Number(days) || 0,
-
-          budget:
-            Number(budget) || 0,
-
-          travelers:
-            Number(travelers) || 1,
-
-          travelType:
-            travelType ||
-            "General",
-
-          plan:
-            plan || null,
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication required. Please login to save your trip.",
         });
+      }
 
-      res.status(201).json({
+      const trip = await SavedTrip.create({
+        userId: user._id,
+        source: String(source).trim(),
+        destination: String(destination).trim(),
+        days: Number(String(days).replace(/[^0-9.]/g, "")) || 1,
+        budget: Number(String(budget).replace(/[^0-9.]/g, "")) || 0,
+        travelers: Number(String(travelers).replace(/[^0-9.]/g, "")) || 1,
+        travelType: travelType || "General",
+        plan: plan || null,
+      });
+
+      return res.status(201).json({
         success: true,
-
-        message:
-          "Trip saved successfully.",
-
+        message: "Trip saved successfully.",
+        tripId: trip._id,
         trip,
       });
     } catch (error) {
