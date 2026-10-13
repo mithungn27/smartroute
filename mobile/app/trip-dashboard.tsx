@@ -23,13 +23,7 @@ import {
   router,
   useLocalSearchParams,
 } from "expo-router";
-
-// ======================================================
-// API
-// ======================================================
-
-const API =
-  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
+import { API } from "@/constants/api";
 
 // ======================================================
 // TYPES

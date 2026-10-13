@@ -12,9 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { router } from "expo-router";
-
-const API_URL =
-  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
+import { API_URL } from "@/constants/api";
 
 export default function SignupScreen() {
   const [name, setName] = useState("");
@@ -96,12 +94,19 @@ export default function SignupScreen() {
           },
         ]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error("Signup error:", error);
+
+      let errorMessage = "Unable to connect to the server.";
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
 
       Alert.alert(
         "Connection Error",
-        "Unable to connect to SMART-ROUTE server."
+        `${errorMessage}\n\nServer:\n${API_URL}\n\nMake sure your backend server is running and your device is on the same network.`
       );
     } finally {
       setLoading(false);

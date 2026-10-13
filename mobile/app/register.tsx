@@ -12,13 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
-
-// ======================================================
-// API CONFIGURATION
-// ======================================================
-
-const API_URL =
-  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
+import { API_URL } from "@/constants/api";
 
 // ======================================================
 // REGISTER SCREEN
@@ -143,12 +137,19 @@ export default function Register() {
       setEmail("");
       setPassword("");
       setConfirmPassword("");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Registration error:", error);
+
+      let errorMessage = "Unable to connect to the server.";
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
 
       Alert.alert(
         "Connection Error",
-        "Unable to connect to the SMART-ROUTE server.\n\nMake sure the backend server is running and your device is connected to the same network."
+        `${errorMessage}\n\nServer:\n${API_URL}\n\nMake sure your backend server is running and your device is connected to the same network.`
       );
     } finally {
       setLoading(false);

@@ -13,16 +13,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-// ======================================================
-// API
-// ======================================================
-
-// IMPORTANT:
-// This must be the IP address of the computer running
-// your SMART-ROUTE backend.
-const API =
-  process.env.EXPO_PUBLIC_API_URL || "http://10.41.70.228:5000";
+import { API } from "@/constants/api";
 
 export default function HomeScreen() {
   // ====================================================
